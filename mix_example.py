@@ -117,3 +117,4 @@ for plant in plant_list['data']:
     indent_print("Importing from Grid - KW: %s"%(mix_status['pactouser']),6)
     indent_print("Exporting to Grid - KW: %s"%(mix_status['pactogrid']),6)
 
+    pp.pprint(api.dashboard_data(datetime.datetime.now(), plant_id ))

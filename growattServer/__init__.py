@@ -193,6 +193,65 @@ class GrowattApi:
         data = json.loads(response.content.decode('utf-8'))
         return data['obj']
 
+    def dashboard_data(self, date, plant_id):
+        """
+NOTRUST   'eAcCharge': '16.1kWh': "Excess Solar" (shown incorrectly in the app as "exported to grid" as it may be used to charge batteries): Solar Production - Consumed Solar (excluding charging batteries)
+TRUST     'eCharge': '21kWh': Solar Production
+NOTRUST   'eChargeToday1': '4.9kWh': Consumed Solar (excluding from batteries) : eAcCharge = eCharge - eChargeToday1
+TRUST     'eChargeToday2': '10.8kWh: Total Self Consumption (solar & batteries): eChargeToday2 = eChargeToday2Echarge1 + echarge1
+TRUST     'eChargeToday2Echarge1': '4.2kWh': Self consumption solar contribution
+TRUST     'echarge1': '6.6kWh': Self consumption battery contribution
+TRUST     'elocalLoad': '19kWh': Load consumption
+TRUST     'etouser': '8.2kWh': Imported from grid
+TRUST     'photovoltaic': '4.2kWh': Load consumption from PV (Same as eChargeToday2Echarge1)
+
+          #NOTE - photovoltaic, eChargeToday2Echarge1 and eChargeToday1 should all be the same, but for some reason eChargeToday1 is different
+          #     Therefore - we choose not to trust the "eAcCharge" and "eChargeToday1" values instead we should calculate them ourselves using other data
+
+
+          Extra value we can get from looking at the "month" view of the data:
+TRUST       - export_to_grid: 10.6
+
+          Extra value we can get from the other function calls:
+TRUST       - Total battery discharge: 6.6
+TRUST       - Total battery charge: 6.2
+
+          Therefore:
+            #This value can only be calculated (all other metrics only give total charge & discharge for the day
+            Battery Charging from Solar (5.5) = Excess Solar (eAcCharge: 16.1) - export_to_grid (10.6)
+
+            Solar Production (eCharge: 21) = Excess Solar (eAcCharge: 16.1) + Consumed Solar (eChargeToday1: 4.9)
+            Solar Production (eCharge: 21) = Battery Charging from Solar (5.5) + export_to_grid (10.6) + Consumed Solar (eChargeToday1: 4.9)
+
+            Load consumption (19) = Imported from grid (etouser: 8.2) + Self consumption battery contribution (6.6) + Consumption from Panels (photovoltaic: 4.2)
+            #NOTE - "photovoltaic" is what makes this add up, but "photovoltaic" and "eChargeToday1" should align, but they don't.
+
+
+          If we don't trust "Excess Solar" then we can calculate it as follows:
+SAME      Excess Solar (16.1) = Solar Production (eCharge: 21) - Consumed Solar (eChargeToday1: 4.9)
+          OR
+DIFF      Excess Solar (16.8) = Solar Production (eCharge: 21) - Load consumption from PV (photovoltaic: 4.2)
+
+          Therefore:
+            #This value can only be calculated (all other metrics only give total charge & discharge for the day
+            Battery Charging from Solar (6.2) = Excess Solar (CALC'd: 16.8) - export_to_grid (10.6)
+
+            Solar Production (eCharge: 21) = Excess Solar (CALC'd: 16.8) + Load consumption from PV (photovoltaic: 4.2)
+            Solar Production (eCharge: 21) = Battery Charging from Solar (6.2) + export_to_grid (10.6) + Load consumption from PV (photovoltaic: 4.2)
+
+            Load consumption (19) = Imported from grid (etouser: 8.2) + Self consumption battery contribution (echarge1: 6.6) + Consumption from Panels (photovoltaic: 4.2)
+        """
+        date_str = date.strftime('%Y-%m-%d')
+        response = self.session.post(self.get_url('newPlantAPI.do?action=getEnergyStorageData'), params={
+#            'date': "2021-03-09",
+            'date': date_str,
+            'type': 0,
+            'plantId': plant_id
+        })
+        data = json.loads(response.content.decode('utf-8'))
+        return data
+
+
     def storage_detail(self, storage_id):
         """
         Get "All parameters" from battery storage.
